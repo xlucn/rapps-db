@@ -1,6 +1,6 @@
 [Section]
 Name = Ant Renamer
-Version = 2.13.0
+Version = 2.13
 License = GPLv2
 Description = Mass file renaming utility, allows for renaming of many files at once.
 Category = 12
