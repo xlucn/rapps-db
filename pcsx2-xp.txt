@@ -5,7 +5,7 @@ License = GNU GPL v2
 Description = PCSX2 is a Playstation 2 emulator. It needs Microsoft Visual C++ 2013 redistributable.
 Category = 4
 URLSite = https://neonfloppy.sytes.net/projects/pcsx2-xp/
-URLDownload = https://neonfloppy.sytes.net/projects/pcsx2-xp/releases/1.6.0/pcsx2-xp-binaries.7z
+URLDownload = https://web.archive.org/web/20250926031722/http://neonfloppy.sytes.net/projects/pcsx2-xp/releases/1.6.0/pcsx2-xp-binaries.7z
 SHA1 = 3dff7c6478942685b84bf7145c1c87621f03af7f 
 SizeBytes = 5897396
 
