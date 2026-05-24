@@ -5,15 +5,15 @@ License = GNU GPL v2
 Description = Peer to peer software for sharing files based in Kad/edk2 servers.
 Category = 5
 URLSite = https://www.emule-project.com
-URLDownload = https://github.com/irwir/eMule/releases/download/eMule_v0.72a-community/emule0.72a_beta3.zip
-SHA1 = b6747c2fe94747605c261be28cdaba0c0678883b
-SizeBytes = 3418622
+URLDownload = https://github.com/irwir/eMule/releases/download/eMule_v0.72a-community/emule0.72a_beta6.zip
+SHA1 = caaaaa4de261172d588d8d90f9ff0dfbb549b762
+SizeBytes = 3401640
 Installer = Generate
 
 [Section.amd64]
-URLDownload = https://github.com/irwir/eMule/releases/download/eMule_v0.72a-community/emule0.72a_x64_beta3.zip
-SHA1 = 81ac101ab42cb6c0e79678564821ac0958e360cd
-SizeBytes = 3994198
+URLDownload = https://github.com/irwir/eMule/releases/download/eMule_v0.72a-community/emule0.72a_x64_beta6.zip
+SHA1 = ff8d7ce2438fc669b5573b4773c1a72f90abfc1e
+SizeBytes = 3972083
 
 [Generate]
 Files = *.exe
