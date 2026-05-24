@@ -37,6 +37,7 @@ def download_file(url, dest_path):
 
     Skips SSLError or URLError.
     """
+    logger.info("Downloading '%s' from %s...", dest_path, url)
     try:
         with urllib.request.urlopen(url) as response, \
                 open(dest_path, 'wb') as out_file:
@@ -72,12 +73,13 @@ def extract_info(ini_file, section='Section'):
     url_download = config[section].get('URLDownload')
     sha1 = config[section].get('SHA1')
     size_bytes = config[section].get('SizeBytes')
+    filename = config[section].get('SaveAs', os.path.basename(url_download))
 
     if not url_download or not sha1 or not size_bytes:
         logger.error("URLDownload or SHA1 or SizeBytes missing in %s.", ini_file)
         return None, None, None
 
-    return url_download, sha1.lower(), int(size_bytes)
+    return url_download, filename, sha1.lower(), int(size_bytes)
 
 
 def check_path(file_path):
@@ -92,8 +94,8 @@ def check_hash(file_path, expected_sha1):
     """Check if file at file_path matches expected SHA1."""
     actual_sha1 = calculate_sha1(file_path)
     if actual_sha1 != expected_sha1:
-        logger.error("SHA1 mismatch for %s.", file_path)
-        logger.error("  Expected: %s, actual: %s.", expected_sha1, actual_sha1)
+        logger.info("SHA1 mismatch for %s.", file_path)
+        logger.info("  Expected: %s, actual: %s.", expected_sha1, actual_sha1)
         return False
     return True
 
@@ -102,31 +104,39 @@ def check_size(file_path, expected_size):
     """Check if file at file_path matches expected size."""
     actual_size = os.path.getsize(file_path)
     if actual_size != expected_size:
-        logger.error("Size mismatch for %s.", file_path)
-        logger.error("  Expected: %d, actual: %d.", expected_size, actual_size)
+        logger.info("Size mismatch for %s.", file_path)
+        logger.info("  Expected: %d, actual: %d.", expected_size, actual_size)
         return False
     return True
 
 
 def download_app(ini_file, section='Section'):
     """Download app specified in ini_file under given section."""
-    url, sha1, size = extract_info(ini_file, section)
+    url, file, sha1, size = extract_info(ini_file, section)
     if not url or not sha1 or not size:
         return
 
-    file_name = os.path.basename(url)
-    dest_path = os.path.join(os.getcwd(), 'apps', file_name)
+    dest_path = os.path.join(os.getcwd(), 'apps', file)
 
     # Check if file already exists and verify size and SHA1
-    if not check_path(dest_path, sha1, size):
-        logger.info("Downloading '%s' from %s...", file_name, url)
-        if download_file(url, dest_path) is False:
-            return
-
-    if not check_hash(dest_path, sha1) or not check_size(dest_path, size):
+    if not check_path(dest_path):
+        logger.warning("%s Not downloaded: from %s", dest_path, url)
         return
 
-    logger.info("Successfully downloaded and verified '%s'.", file_name)
+    # always check both
+    sha1_checked = check_hash(dest_path, sha1)
+    size_checked = check_size(dest_path, size)
+    if not sha1_checked:
+        if not size_checked:
+            logger.error("Both sha1 and size mismatch for %s", dest_path)
+            logger.error("URL: %s", url)
+        else:
+            logger.error("Sha1 mismatch but size match for %s", dest_path)
+    else:
+        if not size_checked:
+            logger.error("Size mismatch but sha1 match for %s", dest_path)
+        else:
+            logger.info("Successfully downloaded and verified '%s'.", dest_path)
 
 
 if __name__ == "__main__":
