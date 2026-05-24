@@ -13,6 +13,7 @@ import configparser
 import hashlib
 import logging
 import os
+import urllib.parse
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("main")
@@ -37,7 +38,8 @@ def extract_info(ini_file, section='Section'):
     url_download = config[section].get('URLDownload')
     sha1 = config[section].get('SHA1')
     size_bytes = config[section].get('SizeBytes')
-    filename = config[section].get('SaveAs', os.path.basename(url_download))
+    filename = urllib.parse.unquote(os.path.basename(url_download))
+    filename = config[section].get('SaveAs', filename)
 
     if not url_download or not sha1 or not size_bytes:
         logger.error("URLDownload, SHA1 or SizeBytes missing in %s.", ini_file)
