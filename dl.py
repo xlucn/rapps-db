@@ -26,27 +26,9 @@ import configparser
 import hashlib
 import logging
 import os
-import urllib.request
 
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger("main")
-
-
-def download_file(url, dest_path):
-    """Download file from url to dest_path.
-
-    Skips SSLError or URLError.
-    """
-    logger.info("Downloading '%s' from %s...", dest_path, url)
-    try:
-        with urllib.request.urlopen(url) as response, \
-                open(dest_path, 'wb') as out_file:
-            data = response.read()
-            out_file.write(data)
-    except (urllib.error.URLError, urllib.error.HTTPError):
-        logger.exception("Error downloading %s", url)
-        return False
-    return True
 
 
 def calculate_sha1(file_path):
@@ -110,7 +92,7 @@ def check_size(file_path, expected_size):
     return True
 
 
-def download_app(ini_file, section='Section'):
+def check_app(ini_file, dump, section='Section'):
     """Download app specified in ini_file under given section."""
     url, file, sha1, size = extract_info(ini_file, section)
     if not url or not sha1 or not size:
@@ -121,6 +103,7 @@ def download_app(ini_file, section='Section'):
     # Check if file already exists and verify size and SHA1
     if not check_path(dest_path):
         logger.warning("%s Not downloaded: from %s", dest_path, url)
+        dump.writelines([f"{url}\n", f"  out=apps/{file}\n"])
         return
 
     # always check both
@@ -130,6 +113,7 @@ def download_app(ini_file, section='Section'):
         if not size_checked:
             logger.error("Both sha1 and size mismatch for %s", dest_path)
             logger.error("URL: %s", url)
+            dump.writelines([f"{url}\n", f"  out=apps/{file}\n"])
         else:
             logger.error("Sha1 mismatch but size match for %s", dest_path)
     else:
@@ -143,7 +127,8 @@ if __name__ == "__main__":
     apps_dir = os.path.join(os.getcwd(), 'apps')
     os.makedirs(apps_dir, exist_ok=True)
 
-    for file in os.listdir(os.getcwd()):
-        if file.endswith('.txt'):
-            ini_file_path = os.path.join(os.getcwd(), file)
-            download_app(ini_file_path, section='Section')
+    with open('urls', 'w') as dump:
+        for file in os.listdir(os.getcwd()):
+            if file.endswith('.txt'):
+                ini_file_path = os.path.join(os.getcwd(), file)
+                check_app(ini_file_path, dump=dump, section='Section')
