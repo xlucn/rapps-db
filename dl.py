@@ -1,46 +1,28 @@
-"""Download ReactOS apps.
+"""Check ReactOS apps.
 
-This folder has files specifying app download information like this:
+This folder is rapps-db repo containing app spec files with following schema:
+    https://reactos.org/wiki/RAPPS#File_Schema
 
-    [Section]
-    Name = QEMU
-    Version = 1.5.50
-    License = GPL v2
-    Category = 12
-    URLSite = https://www.qemu.org/
-    URLDownload = https://qemu.weilnetz.de/w32/2013/qemu-w32-setup-20130627.exe
-    SHA1 = d5c45b5220951a2abbb3340d368c36d3140da83f
-    SizeBytes = 13938504
-
-    [Section.amd64]
-    URLDownload = https://qemu.weilnetz.de/w64/2013/qemu-w64-setup-20130619.exe
-    SHA1 = cfc87ee81c5943761182260ebb07afe60d32804a
-    SizeBytes = 16281897
-
-This script will download the file specified in [Section] group. Before
-download, check for existing file and its hash value, skip if already exist.
-
-For every txt file in this folder, download the app specified in [Section].
+This script will check the file specified in [Section] group (for now).
+- Files absent or have mismatched size and hash are writen to a 'urls' file,
+  which can be used for aria2 to download them.
+- Files have only one mismatch between size and hash are considered to have
+  suspiciously wrong size and hash. Please check the spec files.
 """
 import configparser
 import hashlib
 import logging
 import os
 
-logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("main")
 
 
 def calculate_sha1(file_path):
     """Calculate SHA1 hash of the file at file_path."""
-    sha1 = hashlib.sha1()
     with open(file_path, 'rb') as f:
-        while True:
-            data = f.read(65536)  # Read in 64KB chunks
-            if not data:
-                break
-            sha1.update(data)
-    return sha1.hexdigest()
+        digest = hashlib.file_digest(f, 'sha1')
+    return digest.hexdigest()
 
 
 def extract_info(ini_file, section='Section'):
@@ -58,7 +40,7 @@ def extract_info(ini_file, section='Section'):
     filename = config[section].get('SaveAs', os.path.basename(url_download))
 
     if not url_download or not sha1 or not size_bytes:
-        logger.error("URLDownload or SHA1 or SizeBytes missing in %s.", ini_file)
+        logger.error("URLDownload, SHA1 or SizeBytes missing in %s.", ini_file)
         return None, None, None
 
     return url_download, filename, sha1.lower(), int(size_bytes)
@@ -67,7 +49,7 @@ def extract_info(ini_file, section='Section'):
 def check_path(file_path):
     """Check if file at file_path exists."""
     if not os.path.exists(file_path):
-        logger.debug("File %s does not exist.", file_path)
+        logger.warning("File %s does not exist.", file_path)
         return False
     return True
 
@@ -76,8 +58,8 @@ def check_hash(file_path, expected_sha1):
     """Check if file at file_path matches expected SHA1."""
     actual_sha1 = calculate_sha1(file_path)
     if actual_sha1 != expected_sha1:
-        logger.info("SHA1 mismatch for %s.", file_path)
-        logger.info("  Expected: %s, actual: %s.", expected_sha1, actual_sha1)
+        logger.debug("SHA1 mismatch for %s.", file_path)
+        logger.debug("  Expected: %s, actual: %s.", expected_sha1, actual_sha1)
         return False
     return True
 
@@ -86,8 +68,8 @@ def check_size(file_path, expected_size):
     """Check if file at file_path matches expected size."""
     actual_size = os.path.getsize(file_path)
     if actual_size != expected_size:
-        logger.info("Size mismatch for %s.", file_path)
-        logger.info("  Expected: %d, actual: %d.", expected_size, actual_size)
+        logger.debug("Size mismatch for %s.", file_path)
+        logger.debug("  Expected: %d, actual: %d.", expected_size, actual_size)
         return False
     return True
 
@@ -102,7 +84,7 @@ def check_app(ini_file, dump, section='Section'):
 
     # Check if file already exists and verify size and SHA1
     if not check_path(dest_path):
-        logger.warning("%s Not downloaded: from %s", dest_path, url)
+        logger.error("%s Not downloaded: from %s", dest_path, url)
         dump.writelines([f"{url}\n", f"  out=apps/{file}\n"])
         return
 
@@ -120,7 +102,7 @@ def check_app(ini_file, dump, section='Section'):
         if not size_checked:
             logger.error("Size mismatch but sha1 match for %s", dest_path)
         else:
-            logger.info("Successfully downloaded and verified '%s'.", dest_path)
+            logger.debug("Successfully downloaded '%s'.", dest_path)
 
 
 if __name__ == "__main__":
@@ -132,3 +114,5 @@ if __name__ == "__main__":
             if file.endswith('.txt'):
                 ini_file_path = os.path.join(os.getcwd(), file)
                 check_app(ini_file_path, dump=dump, section='Section')
+    logger.info("Files needed re-download are exported to 'urls' file. "
+                "The file can be used as input file for aria2.")
