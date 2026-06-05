@@ -1,6 +1,6 @@
 """Check ReactOS apps.
 
-This folder is rapps-db repo containing app spec files with following schema:
+This script checks rapps-db repo containing app spec files with the schema:
     https://reactos.org/wiki/RAPPS#File_Schema
 
 This script will check the file specified in [Section] group (for now).
@@ -77,7 +77,7 @@ def check_size(file_path, expected_size):
 
 
 def check_app(ini_file, dump, section='Section'):
-    """Download app specified in ini_file under given section."""
+    """Check app specified in ini_file under given section."""
     url, file, sha1, size = extract_info(ini_file, section)
     if not url or not sha1 or not size:
         return
@@ -86,7 +86,7 @@ def check_app(ini_file, dump, section='Section'):
 
     # Check if file already exists and verify size and SHA1
     if not check_path(dest_path):
-        logger.error("%s Not downloaded: from %s", dest_path, url)
+        logger.error("%s missing: from %s", dest_path, url)
         dump.writelines([f"{url}\n", f"  out=apps/{file}\n"])
         return
 
@@ -104,7 +104,7 @@ def check_app(ini_file, dump, section='Section'):
         if not size_checked:
             logger.error("Size mismatch but sha1 match for %s", dest_path)
         else:
-            logger.debug("Successfully downloaded '%s'.", dest_path)
+            logger.debug("Found and checked '%s'.", dest_path)
 
 
 if __name__ == "__main__":
