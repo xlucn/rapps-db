@@ -32,8 +32,8 @@ def extract_info(ini_file, section='Section'):
     config.read(ini_file)
 
     if section not in config:
-        logger.error("Section '%s' not found in %s.", section, ini_file)
-        return None, None, None
+        logger.debug("Section '%s' not found in %s.", section, ini_file)
+        return None, None, None, None
 
     url_download = config[section].get('URLDownload')
     sha1 = config[section].get('SHA1')
@@ -43,7 +43,7 @@ def extract_info(ini_file, section='Section'):
 
     if not url_download or not sha1 or not size_bytes:
         logger.error("URLDownload, SHA1 or SizeBytes missing in %s.", ini_file)
-        return None, None, None
+        return None, None, None, None
 
     return url_download, filename, sha1.lower(), int(size_bytes)
 
@@ -116,5 +116,6 @@ if __name__ == "__main__":
             if file.endswith('.txt'):
                 ini_file_path = os.path.join(os.getcwd(), file)
                 check_app(ini_file_path, dump=dump, section='Section')
+                check_app(ini_file_path, dump=dump, section='Section.amd64')
     logger.info("Files needed re-download are exported to 'urls' file. "
                 "The file can be used as input file for aria2.")
