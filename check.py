@@ -25,35 +25,20 @@ def calculate_sha1(file_path):
         digest = hashlib.file_digest(f, 'sha1')
     return digest.hexdigest()
 
-
-def extract_info(ini_file, section='Section'):
-    """Extract URLDownload, SHA1, and SizeBytes from ini_file."""
-    config = configparser.ConfigParser(interpolation=None)
-    config.read(ini_file)
-
-    if section not in config:
-        logger.debug("Section '%s' not found in %s.", section, ini_file)
+def extract_info(section):
+    """Extract URLDownload, SHA1, and SizeBytes from one section in ini_file."""
+    url_download = section.get('URLDownload')
+    if url_download is None:
         return None, None, None, None
+    filename = urllib.parse.unquote(os.path.basename(url_download).split('?')[0])
+    filename = section.get('SaveAs', filename)
 
-    url_download = config[section].get('URLDownload')
-    sha1 = config[section].get('SHA1')
-    size_bytes = config[section].get('SizeBytes')
-    filename = urllib.parse.unquote(os.path.basename(url_download))
-    filename = config[section].get('SaveAs', filename)
-
-    if not url_download or not sha1 or not size_bytes:
-        logger.error("URLDownload, SHA1 or SizeBytes missing in %s.", ini_file)
-        return None, None, None, None
+    sha1 = section.get('SHA1')
+    size_bytes = section.get('SizeBytes')
+    if not sha1 or not size_bytes:
+        return url_download, filename, None, None
 
     return url_download, filename, sha1.lower(), int(size_bytes)
-
-
-def check_path(file_path):
-    """Check if file at file_path exists."""
-    if not os.path.exists(file_path):
-        logger.warning("File %s does not exist.", file_path)
-        return False
-    return True
 
 
 def check_hash(file_path, expected_sha1):
@@ -76,17 +61,19 @@ def check_size(file_path, expected_size):
     return True
 
 
-def check_app(ini_file, dump, section='Section'):
+def check_section(section, dump):
     """Check app specified in ini_file under given section."""
-    url, file, sha1, size = extract_info(ini_file, section)
-    if not url or not sha1 or not size:
+    url, file, sha1, size = extract_info(section)
+    if not sha1 or not size:
+        if url and file:
+            logger.error("SHA1 or SizeBytes missing for %s.", file)
         return
 
     dest_path = os.path.join(os.getcwd(), 'apps', file)
 
     # Check if file already exists and verify size and SHA1
-    if not check_path(dest_path):
-        logger.error("%s missing: from %s", dest_path, url)
+    if not os.path.exists(dest_path):
+        logger.error("Missing %s", file)
         dump.writelines([f"{url}\n", f"  out=apps/{file}\n"])
         return
 
@@ -95,27 +82,36 @@ def check_app(ini_file, dump, section='Section'):
     size_checked = check_size(dest_path, size)
     if not sha1_checked:
         if not size_checked:
-            logger.error("Both sha1 and size mismatch for %s", dest_path)
-            logger.error("URL: %s", url)
+            logger.error("Both sha1 and size mismatch for %s", file)
             dump.writelines([f"{url}\n", f"  out=apps/{file}\n"])
         else:
-            logger.error("Sha1 mismatch but size match for %s", dest_path)
+            logger.error("Sha1 mismatch but size match for %s", file)
     else:
         if not size_checked:
-            logger.error("Size mismatch but sha1 match for %s", dest_path)
+            logger.error("Size mismatch but sha1 match for %s", file)
         else:
-            logger.debug("Found and checked '%s'.", dest_path)
+            logger.debug("Found and checked '%s'.", file)
+
+
+def check_apps(ini_file, dump, sections):
+    """Check app for all sections specified in ini_file."""
+    config = configparser.ConfigParser(interpolation=None)
+    config.read(ini_file)
+    for section in config.sections():
+        if section not in sections:
+            continue
+        check_section(config[section], dump)
 
 
 if __name__ == "__main__":
     apps_dir = os.path.join(os.getcwd(), 'apps')
     os.makedirs(apps_dir, exist_ok=True)
 
+    sections = ["Section", "Section.amd64"]
     with open('urls', 'w') as dump:
         for file in os.listdir(os.getcwd()):
             if file.endswith('.txt'):
                 ini_file_path = os.path.join(os.getcwd(), file)
-                check_app(ini_file_path, dump=dump, section='Section')
-                check_app(ini_file_path, dump=dump, section='Section.amd64')
-    logger.info("Files needed re-download are exported to 'urls' file. "
-                "The file can be used as input file for aria2.")
+                check_apps(ini_file_path, dump=dump, sections=sections)
+    logger.info("Files needed re-download are exported to 'urls' file.")
+    logger.info("The file can be used as input file for aria2.")
