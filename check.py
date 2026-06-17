@@ -15,7 +15,7 @@ import logging
 import os
 import urllib.parse
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO").upper())
 logger = logging.getLogger("main")
 
 
