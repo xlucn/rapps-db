@@ -19,6 +19,7 @@ RegName = {F0C3E5D1-1ADE-321E-8167-68EF0DE699A5}
 URLDownload = https://download.microsoft.com/download/1/6/5/165255E7-1014-4D0A-B094-B6A430A6BFFC/vcredist_x64.exe
 SHA1 = 8691972f0a5bf919701ac3b80fb693fc715420c2
 SizeBytes = 10277328
+SaveAs = vcredist_x64_vc2010.exe
 RegName = {1D8E6291-B0D5-35EC-8441-6616F567A0F7}
 
 [Section.0a]
