@@ -13,6 +13,7 @@ import configparser
 import hashlib
 import logging
 import os
+import sys
 import urllib.parse
 
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO").upper())
@@ -107,11 +108,13 @@ if __name__ == "__main__":
     apps_dir = os.path.join(os.getcwd(), 'apps')
     os.makedirs(apps_dir, exist_ok=True)
 
+    files = sys.argv[1:] if len(sys.argv) > 1 else os.listdir(os.getcwd())
+
     sections = ["Section", "Section.amd64"]
     with open('urls', 'w') as dump:
-        for file in os.listdir(os.getcwd()):
+        for file in files:
             if file.endswith('.txt'):
                 ini_file_path = os.path.join(os.getcwd(), file)
                 check_apps(ini_file_path, dump=dump, sections=sections)
-    logger.info("Files needed re-download are exported to 'urls' file.")
-    logger.info("The file can be used as input file for aria2.")
+    # logger.info("Files needed re-download are exported to 'urls' file.")
+    # logger.info("The file can be used as input file for aria2.")
