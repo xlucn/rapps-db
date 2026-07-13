@@ -10,111 +10,110 @@ This script will check the file specified in [Section] group (for now).
   suspiciously wrong size and hash. Please check the spec files.
 """
 import configparser
+import enum
 import hashlib
-import logging
 import os
 import sys
 import urllib.parse
 
-logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO").upper())
-logger = logging.getLogger("main")
+
+class E(enum.Enum):
+    """Return codes for check_apps."""
+
+    PASS = 0
+    INFO = 1
+    MISSING = 2
+    SHA1 = 3
+    SIZE = 4
+    BOTH = 5
 
 
 def calculate_sha1(file_path):
     """Calculate SHA1 hash of the file at file_path."""
     with open(file_path, 'rb') as f:
-        digest = hashlib.file_digest(f, 'sha1')
-    return digest.hexdigest()
+        return hashlib.file_digest(f, 'sha1').hexdigest()
+
 
 def extract_info(section):
     """Extract URLDownload, SHA1, and SizeBytes from one section in ini_file."""
     url_download = section.get('URLDownload')
-    if url_download is None:
-        return None, None, None, None
-    filename = urllib.parse.unquote(os.path.basename(url_download).split('?')[0])
+    filename = os.path.basename(url_download).split('?')[0]
+    filename = urllib.parse.unquote(filename)
     filename = section.get('SaveAs', filename)
 
     sha1 = section.get('SHA1')
     size_bytes = section.get('SizeBytes')
-    if not sha1 or not size_bytes:
-        return url_download, filename, None, None
 
-    return url_download, filename, sha1.lower(), int(size_bytes)
+    return url_download, filename, sha1, size_bytes
 
 
-def check_hash(file_path, expected_sha1):
-    """Check if file at file_path matches expected SHA1."""
-    actual_sha1 = calculate_sha1(file_path)
-    if actual_sha1 != expected_sha1:
-        logger.debug("SHA1 mismatch for %s.", file_path)
-        logger.debug("  Expected: %s, actual: %s.", expected_sha1, actual_sha1)
-        return False
-    return True
-
-
-def check_size(file_path, expected_size):
-    """Check if file at file_path matches expected size."""
-    actual_size = os.path.getsize(file_path)
-    if actual_size != expected_size:
-        logger.debug("Size mismatch for %s.", file_path)
-        logger.debug("  Expected: %d, actual: %d.", expected_size, actual_size)
-        return False
-    return True
-
-
-def check_section(section, dump):
+def check_section(section):
     """Check app specified in ini_file under given section."""
+    if section.get('URLDownload') is None:
+        return E.PASS, None
+
     url, file, sha1, size = extract_info(section)
     if not sha1 or not size:
-        if url and file:
-            logger.error("SHA1 or SizeBytes missing for %s.", file)
-        return
+        return E.INFO, section.name
 
     dest_path = os.path.join(os.getcwd(), 'apps', file)
 
-    # Check if file already exists and verify size and SHA1
+    # Check if file already exists
     if not os.path.exists(dest_path):
-        logger.error("Missing %s", file)
-        dump.writelines([f"{url}\n", f"  out=apps/{file}\n"])
-        return
+        return E.MISSING, url, file
 
-    # always check both
-    sha1_checked = check_hash(dest_path, sha1)
-    size_checked = check_size(dest_path, size)
-    if not sha1_checked:
-        if not size_checked:
-            logger.error("Both sha1 and size mismatch for %s", file)
-            dump.writelines([f"{url}\n", f"  out=apps/{file}\n"])
-        else:
-            logger.error("Sha1 mismatch but size match for %s", file)
-    else:
-        if not size_checked:
-            logger.error("Size mismatch but sha1 match for %s", file)
-        else:
-            logger.debug("Found and checked '%s'.", file)
+    # Check size and SHA1
+    sha1_match = calculate_sha1(dest_path) == sha1.lower()
+    size_match = os.path.getsize(dest_path) == int(size)
+    if not sha1_match and not size_match:
+        return E.BOTH, file
+    if not sha1_match and size_match:
+        return E.SHA1, file
+    if not size_match and sha1_match:
+        return E.SIZE, file
+    return E.PASS, None
 
 
-def check_apps(ini_file, dump, sections):
-    """Check app for all sections specified in ini_file."""
-    config = configparser.ConfigParser(interpolation=None)
-    config.read(ini_file)
-    for section in config.sections():
-        if section not in sections:
-            continue
-        check_section(config[section], dump)
-
-
-if __name__ == "__main__":
+def check_apps():
+    """Check apps in rapps-db repo."""
     apps_dir = os.path.join(os.getcwd(), 'apps')
     os.makedirs(apps_dir, exist_ok=True)
 
     files = sys.argv[1:] if len(sys.argv) > 1 else os.listdir(os.getcwd())
+    errors = { E.INFO: [], E.MISSING: [], E.SHA1: [], E.SIZE: [], E.BOTH: [] }
 
+    config = configparser.ConfigParser(interpolation=None)
     sections = ["Section", "Section.amd64"]
-    with open('urls', 'w') as dump:
-        for file in files:
-            if file.endswith('.txt'):
-                ini_file_path = os.path.join(os.getcwd(), file)
-                check_apps(ini_file_path, dump=dump, sections=sections)
-    # logger.info("Files needed re-download are exported to 'urls' file.")
-    # logger.info("The file can be used as input file for aria2.")
+
+    for file in files:
+        if not file.endswith('.txt'):
+            continue
+        config.read(os.path.join(os.getcwd(), file))
+        for section in config.sections():
+            if section not in sections:
+                continue
+            err, args = check_section(config[section])
+            if err == E.PASS:
+                continue
+            if err == E.INFO:
+                errors[err].append(f"{file}[{args}]")
+            else:
+                errors[err].append(args)
+        config.clear()
+        print('.', end='', flush=True)
+
+    print("\nMissing SHA1 or SizeBytes:\n- " + "\n- ".join(errors[E.INFO]))
+    print("Missing files:\n- " + "\n- ".join(errors[E.MISSING]))
+    print("SHA1 mismatch:\n- " + "\n- ".join(errors[E.SHA1]))
+    print("Size mismatch:\n- " + "\n- ".join(errors[E.SIZE]))
+    print("Both SHA1 and Size mismatch:\n- " + "\n- ".join(errors[E.BOTH]))
+
+    if len(errors[E.MISSING]) > 0:
+        with open('urls', 'w') as f:
+            for url, file in errors[E.MISSING]:
+                f.writelines([f"{url}\n", f"  out=apps/{file}\n"])
+        print("Missing files URLs written to 'urls' file. "
+              "You can use it with aria2 to download them.")
+
+if __name__ == "__main__":
+    check_apps()
