@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Check ReactOS apps.
 
 This script checks rapps-db repo containing app spec files with the schema:
@@ -9,12 +10,14 @@ This script will check the file specified in [Section] group (for now).
 - Files have only one mismatch between size and hash are considered to have
   suspiciously wrong size and hash. Please check the spec files.
 """
+import argparse
 import configparser
 import enum
 import hashlib
 import os
-import sys
 import urllib.parse
+
+SECTIONS = ["Section", "Section.amd64"]
 
 
 class E(enum.Enum):
@@ -47,16 +50,19 @@ def extract_info(section):
     return url_download, filename, sha1, size_bytes
 
 
-def check_section(section):
+def check_section(section, apps_dir, dump):
     """Check app specified in ini_file under given section."""
     if section.get('URLDownload') is None:
         return E.PASS, None
 
     url, file, sha1, size = extract_info(section)
+    dest_path = os.path.join(apps_dir, file)
+
+    if dump:
+        print(file)
+        return E.PASS, None
     if not sha1 or not size:
         return E.INFO, section.name
-
-    dest_path = os.path.join(os.getcwd(), 'apps', file)
 
     # Check if file already exists
     if not os.path.exists(dest_path):
@@ -74,25 +80,19 @@ def check_section(section):
     return E.PASS, None
 
 
-def check_apps():
+def check_apps(txt_files, apps_dir, dump):
     """Check apps in rapps-db repo."""
-    apps_dir = os.path.join(os.getcwd(), 'apps')
-    os.makedirs(apps_dir, exist_ok=True)
-
-    files = sys.argv[1:] if len(sys.argv) > 1 else os.listdir(os.getcwd())
+    files = txt_files or os.listdir(os.getcwd())
+    files = [f for f in files if f.endswith('.txt')]
     errors = { E.INFO: [], E.MISSING: [], E.SHA1: [], E.SIZE: [], E.BOTH: [] }
 
     config = configparser.ConfigParser(interpolation=None)
-    sections = ["Section", "Section.amd64"]
 
     for file in files:
-        if not file.endswith('.txt'):
-            continue
         config.read(os.path.join(os.getcwd(), file))
-        for section in config.sections():
-            if section not in sections:
-                continue
-            err, args = check_section(config[section])
+        sections = [s for s in config.sections() if s in SECTIONS]
+        for section in sections:
+            err, args = check_section(config[section], apps_dir, dump)
             if err == E.PASS:
                 continue
             if err == E.INFO:
@@ -100,7 +100,11 @@ def check_apps():
             else:
                 errors[err].append(args)
         config.clear()
-        print('.', end='', flush=True)
+        if not dump:
+            print('.', end='', flush=True)
+
+    if dump:
+        return
 
     print("\nMissing SHA1 or SizeBytes:\n- " + "\n- ".join(errors[E.INFO]))
     print("Missing files:\n- " + "\n- ".join(errors[E.MISSING]))
@@ -111,9 +115,24 @@ def check_apps():
     if len(errors[E.MISSING]) > 0:
         with open('urls', 'w') as f:
             for url, file in errors[E.MISSING]:
-                f.writelines([f"{url}\n", f"  out=apps/{file}\n"])
+                f.writelines([f"{url}\n", f"  out={apps_dir}/{file}\n"])
         print("Missing files URLs written to 'urls' file. "
               "You can use it with aria2 to download them.")
 
+
 if __name__ == "__main__":
-    check_apps()
+    parser = argparse.ArgumentParser(description="Check ReactOS apps "
+                                     "for sha1 and size mismatches.")
+    parser.add_argument('-i', '--input', metavar='txt_file', nargs='+',
+                        help="INI files to check. If not specified, all .txt "
+                        "files in the current directory will be checked.")
+    parser.add_argument('-d', '--apps-dir', default='./apps',
+                        help="Directory to check for downloaded apps. "
+                        "Default is 'apps' in the current directory.")
+    parser.add_argument('-D', '--dump', action='store_true',
+                        help="Dump athe list of all apps without checking.")
+    args = parser.parse_args()
+
+    apps_dir = os.path.abspath(args.apps_dir)
+    os.makedirs(apps_dir, exist_ok=True)
+    check_apps(txt_files=args.input, apps_dir=apps_dir, dump=args.dump)
