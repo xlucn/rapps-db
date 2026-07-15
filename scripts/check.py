@@ -80,6 +80,27 @@ def check_section(section, apps_dir, dump):
     return E.PASS, None
 
 
+def report(errors, apps_dir):
+    """Report errors found during check_apps."""
+    if len(errors[E.INFO]) > 0:
+        print("Missing SHA1 or SizeBytes:\n- " + "\n- ".join(errors[E.INFO]))
+    if len(errors[E.MISSING]) > 0:
+        print("Missing files:\n- " + "\n- ".join(errors[E.MISSING]))
+    if len(errors[E.SHA1]) > 0:
+        print("SHA1 mismatch:\n- " + "\n- ".join(errors[E.SHA1]))
+    if len(errors[E.SIZE]) > 0:
+        print("Size mismatch:\n- " + "\n- ".join(errors[E.SIZE]))
+    if len(errors[E.BOTH]) > 0:
+        print("Both SHA1 and Size mismatch:\n- " + "\n- ".join(errors[E.BOTH]))
+
+    if len(errors[E.MISSING]) > 0:
+        with open('urls', 'w') as f:
+            for url, file in errors[E.MISSING]:
+                f.writelines([f"{url}\n", f"  out={apps_dir}/{file}\n"])
+        print("Missing files URLs written to 'urls' file. "
+              "You can use it with aria2 to download them.")
+
+
 def check_apps(txt_files, apps_dir, dump):
     """Check apps in rapps-db repo."""
     files = txt_files or os.listdir(os.getcwd())
@@ -103,27 +124,15 @@ def check_apps(txt_files, apps_dir, dump):
         if not dump:
             print('.', end='', flush=True)
 
-    if dump:
-        return
-
-    print("\nMissing SHA1 or SizeBytes:\n- " + "\n- ".join(errors[E.INFO]))
-    print("Missing files:\n- " + "\n- ".join(errors[E.MISSING]))
-    print("SHA1 mismatch:\n- " + "\n- ".join(errors[E.SHA1]))
-    print("Size mismatch:\n- " + "\n- ".join(errors[E.SIZE]))
-    print("Both SHA1 and Size mismatch:\n- " + "\n- ".join(errors[E.BOTH]))
-
-    if len(errors[E.MISSING]) > 0:
-        with open('urls', 'w') as f:
-            for url, file in errors[E.MISSING]:
-                f.writelines([f"{url}\n", f"  out={apps_dir}/{file}\n"])
-        print("Missing files URLs written to 'urls' file. "
-              "You can use it with aria2 to download them.")
+    if not dump:
+        print()
+        report(errors, apps_dir)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Check ReactOS apps "
                                      "for sha1 and size mismatches.")
-    parser.add_argument('-i', '--input', metavar='txt_file', nargs='+',
+    parser.add_argument('txt_file', nargs='*',
                         help="INI files to check. If not specified, all .txt "
                         "files in the current directory will be checked.")
     parser.add_argument('-d', '--apps-dir', default='./apps',
@@ -135,4 +144,4 @@ if __name__ == "__main__":
 
     apps_dir = os.path.abspath(args.apps_dir)
     os.makedirs(apps_dir, exist_ok=True)
-    check_apps(txt_files=args.input, apps_dir=apps_dir, dump=args.dump)
+    check_apps(txt_files=args.txt_file, apps_dir=apps_dir, dump=args.dump)
