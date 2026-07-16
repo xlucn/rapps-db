@@ -100,6 +100,9 @@ def report(errors, apps_dir):
         print("Missing files URLs written to 'urls' file. "
               "You can use it with aria2 to download them.")
 
+    if all(len(errors[e]) == 0 for e in errors):
+        print("All files are present and correct.")
+
 
 def check_apps(txt_files, apps_dir, dump):
     """Check apps in rapps-db repo."""
