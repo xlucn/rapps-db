@@ -66,7 +66,7 @@ def check_section(section, apps_dir, dump):
 
     # Check if file already exists
     if not os.path.exists(dest_path):
-        return E.MISSING, url, file
+        return E.MISSING, (url, file)
 
     # Check size and SHA1
     sha1_match = calculate_sha1(dest_path) == sha1.lower()
@@ -83,9 +83,11 @@ def check_section(section, apps_dir, dump):
 def report(errors, apps_dir):
     """Report errors found during check_apps."""
     if len(errors[E.INFO]) > 0:
-        print("Missing SHA1 or SizeBytes:\n- " + "\n- ".join(errors[E.INFO]))
+        print("Missing SHA1 or SizeBytes:" + "\n- ".join(errors[E.INFO]))
     if len(errors[E.MISSING]) > 0:
-        print("Missing files:\n- " + "\n- ".join(errors[E.MISSING]))
+        print("Missing files:")
+        for url, file in errors[E.MISSING]:
+            print(f"- {file} (URL: {url})")
     if len(errors[E.SHA1]) > 0:
         print("SHA1 mismatch:\n- " + "\n- ".join(errors[E.SHA1]))
     if len(errors[E.SIZE]) > 0:
