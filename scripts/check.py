@@ -98,7 +98,9 @@ def report(errors, apps_dir):
     if len(errors[E.MISSING]) > 0:
         with open('urls', 'w') as f:
             for url, file in errors[E.MISSING]:
-                f.writelines([f"{url}\n", f"  out={apps_dir}/{file}\n"])
+                f.writelines([f"{url}\n",
+                              f"  dir={apps_dir}\n",
+                              f"  out={file}\n"])
         print("Missing files URLs written to 'urls' file. "
               "You can use it with aria2 to download them.")
 
