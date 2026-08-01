@@ -31,15 +31,18 @@ class E(enum.Enum):
     BOTH = 5
 
 
-def calculate_sha1(file_path):
+def calculate_sha1(file_path: str) -> str:
     """Calculate SHA1 hash of the file at file_path."""
     with open(file_path, 'rb') as f:
         return hashlib.file_digest(f, 'sha1').hexdigest()
 
 
-def extract_info(section):
+def extract_info(section: configparser.SectionProxy) -> dict | None:
     """Extract URLDownload, SHA1, and SizeBytes from one section in ini_file."""
     url_download = section.get('URLDownload')
+    if url_download is None:
+        return None
+
     filename = os.path.basename(url_download).split('?')[0]
     filename = urllib.parse.unquote(filename)
     filename = section.get('SaveAs', filename)
@@ -47,40 +50,50 @@ def extract_info(section):
     sha1 = section.get('SHA1')
     size_bytes = section.get('SizeBytes')
 
-    return url_download, filename, sha1, size_bytes
+    return {
+        'url': url_download,
+        'file': filename,
+        'sha1': sha1,
+        'size': size_bytes,
+    }
 
 
-def check_section(section, apps_dir, dump):
+def check_section(
+    section: configparser.SectionProxy,
+    apps_dir: str,
+    *,
+    dump: bool,
+):
     """Check app specified in ini_file under given section."""
-    if section.get('URLDownload') is None:
+    info = extract_info(section)
+    if info is None:
         return E.PASS, None
 
-    url, file, sha1, size = extract_info(section)
-    dest_path = os.path.join(apps_dir, file)
+    dest_path = os.path.join(apps_dir, info['file'])
 
     if dump:
-        print(file)
+        print(info['file'])
         return E.PASS, None
-    if not sha1 or not size:
+    if not info['sha1'] or not info['size']:
         return E.INFO, section.name
 
     # Check if file already exists
     if not os.path.exists(dest_path):
-        return E.MISSING, (url, file)
+        return E.MISSING, (info['url'], info['file'])
 
     # Check size and SHA1
-    sha1_match = calculate_sha1(dest_path) == sha1.lower()
-    size_match = os.path.getsize(dest_path) == int(size)
+    sha1_match = calculate_sha1(dest_path) == info['sha1'].lower()
+    size_match = os.path.getsize(dest_path) == int(info['size'])
     if not sha1_match and not size_match:
-        return E.BOTH, file
+        return E.BOTH, info['file']
     if not sha1_match and size_match:
-        return E.SHA1, file
+        return E.SHA1, info['file']
     if not size_match and sha1_match:
-        return E.SIZE, file
+        return E.SIZE, info['file']
     return E.PASS, None
 
 
-def report(errors, apps_dir):
+def report(errors: dict, apps_dir: str):
     """Report errors found during check_apps."""
     if len(errors[E.INFO]) > 0:
         print("Missing SHA1 or SizeBytes:" + "\n- ".join(errors[E.INFO]))
@@ -108,7 +121,7 @@ def report(errors, apps_dir):
         print("All files are present and correct.")
 
 
-def check_apps(txt_files, apps_dir, dump):
+def check_apps(txt_files: list[str], apps_dir: str, *, dump: bool):
     """Check apps in rapps-db repo."""
     files = txt_files or os.listdir(os.getcwd())
     files = [f for f in files if f.endswith('.txt')]
@@ -120,7 +133,7 @@ def check_apps(txt_files, apps_dir, dump):
         config.read(os.path.join(os.getcwd(), file))
         sections = [s for s in config.sections() if s in SECTIONS]
         for section in sections:
-            err, args = check_section(config[section], apps_dir, dump)
+            err, args = check_section(config[section], apps_dir, dump=dump)
             if err == E.PASS:
                 continue
             if err == E.INFO:
