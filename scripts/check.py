@@ -96,7 +96,7 @@ def check_section(
 def report(errors: dict, apps_dir: str):
     """Report errors found during check_apps."""
     if len(errors[E.INFO]) > 0:
-        print("Missing SHA1 or SizeBytes:" + "\n- ".join(errors[E.INFO]))
+        print("Missing SHA1 or SizeBytes:\n- " + "\n- ".join(errors[E.INFO]))
     if len(errors[E.MISSING]) > 0:
         print("Missing files:")
         for url, file in errors[E.MISSING]:
