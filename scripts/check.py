@@ -63,6 +63,7 @@ def check_section(
     apps_dir: str,
     *,
     dump: bool,
+    sha1: bool = True,
 ):
     """Check app specified in ini_file under given section."""
     info = extract_info(section)
@@ -82,7 +83,7 @@ def check_section(
         return E.MISSING, (info['url'], info['file'])
 
     # Check size and SHA1
-    sha1_match = calculate_sha1(dest_path) == info['sha1'].lower()
+    sha1_match = calculate_sha1(dest_path) == info['sha1'].lower() if sha1 else True
     size_match = os.path.getsize(dest_path) == int(info['size'])
     if not sha1_match and not size_match:
         return E.BOTH, info['file']
@@ -121,7 +122,7 @@ def report(errors: dict, apps_dir: str):
         print("All files are present and correct.")
 
 
-def check_apps(txt_files: list[str], apps_dir: str, *, dump: bool):
+def check_apps(txt_files: list[str], apps_dir: str, *, dump: bool, sha1: bool):
     """Check apps in rapps-db repo."""
     files = txt_files or os.listdir(os.getcwd())
     files = [f for f in files if f.endswith('.txt')]
@@ -133,7 +134,7 @@ def check_apps(txt_files: list[str], apps_dir: str, *, dump: bool):
         config.read(os.path.join(os.getcwd(), file))
         sections = [s for s in config.sections() if s in SECTIONS]
         for section in sections:
-            err, args = check_section(config[section], apps_dir, dump=dump)
+            err, args = check_section(config[section], apps_dir, dump=dump, sha1=sha1)
             if err == E.PASS:
                 continue
             if err == E.INFO:
@@ -160,8 +161,13 @@ if __name__ == "__main__":
                         "Default is 'apps' in the current directory.")
     parser.add_argument('-D', '--dump', action='store_true',
                         help="Dump athe list of all apps without checking.")
+    parser.add_argument('--no-sha1', action='store_true',
+                        help="Skip SHA1 check. Only check file size.")
     args = parser.parse_args()
 
     apps_dir = os.path.abspath(args.apps_dir)
     os.makedirs(apps_dir, exist_ok=True)
-    check_apps(txt_files=args.txt_file, apps_dir=apps_dir, dump=args.dump)
+    check_apps(txt_files=args.txt_file,
+               apps_dir=apps_dir,
+               dump=args.dump,
+               sha1=not args.no_sha1)
