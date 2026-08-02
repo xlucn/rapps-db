@@ -86,25 +86,26 @@ def check_info(info: dict, apps_dir: str, *, sha1: bool = True):
 
 def report(errors: dict, apps_dir: str):
     """Report errors found during check_apps."""
-    if len(errors[E.INFO]) > 0:
-        print("Missing SHA1 or SizeBytes:\n- " + "\n- ".join(errors[E.INFO]))
-    if len(errors[E.MISSING]) > 0:
-        print("Missing files:")
-        for url, file in errors[E.MISSING]:
-            print(f"- {file} (URL: {url})")
-    if len(errors[E.SHA1]) > 0:
-        print("SHA1 mismatch:\n- " + "\n- ".join(errors[E.SHA1]))
-    if len(errors[E.SIZE]) > 0:
-        print("Size mismatch:\n- " + "\n- ".join(errors[E.SIZE]))
-    if len(errors[E.BOTH]) > 0:
-        print("Both SHA1 and Size mismatch:\n- " + "\n- ".join(errors[E.BOTH]))
+    error_messages = {
+        E.INFO: "Missing SHA1 or SizeBytes",
+        E.MISSING: "Missing files",
+        E.SHA1: "SHA1 mismatch",
+        E.SIZE: "Size mismatch",
+        E.BOTH: "Both SHA1 and Size mismatch",
+    }
+
+    for error_type, message in error_messages.items():
+        if len(errors[error_type]) > 0:
+            print(f"{message}:\n- " + "\n- ".join([
+                e['location'] + ': ' + e['info']['file'] for e in errors[error_type]
+            ]))
 
     if len(errors[E.MISSING]) > 0:
         with open('urls', 'w') as f:
-            for url, file in errors[E.MISSING]:
-                f.writelines([f"{url}\n",
+            for e in errors[E.MISSING]:
+                f.writelines([f"{e['info']['url']}\n",
                               f"  dir={apps_dir}\n",
-                              f"  out={file}\n"])
+                              f"  out={e['info']['file']}\n"])
         print("Missing files URLs written to 'urls' file. "
               "You can use it with aria2 to download them.")
 
@@ -136,7 +137,10 @@ def check_apps(txt_files: list[str], apps_dir: str, *, dump: bool, sha1: bool):
                 ret = check_info(info, apps_dir, sha1=sha1)
                 if ret == E.PASS:
                     continue
-                errors[ret].append(f"{file}[{section}]: {info['file']}")
+                errors[ret].append({
+                    'location': f"{file}[{section}]",
+                    'info': info,
+                })
 
     if not dump:
         print()
