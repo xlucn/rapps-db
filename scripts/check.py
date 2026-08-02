@@ -16,6 +16,7 @@ import enum
 import hashlib
 import os
 import urllib.parse
+from collections import defaultdict
 
 SECTIONS = ["Section", "Section.amd64"]
 
@@ -127,11 +128,10 @@ def check_all_info(all_info: list[dict], apps_dir: str, *, skip_sha1: bool):
             'location': "{app_file}[{section}]".format_map(info),
             'info': info,
         })
-    print()
 
     for error_type, message in error_messages.items():
         if len(errors[error_type]) > 0:
-            print(f"{message}:\n- " + "\n- ".join([
+            print(f"\n{message}:\n- " + "\n- ".join([
                 e['location'] + ': ' + e['info']['file'] for e in errors[error_type]
             ]))
 
@@ -146,6 +146,43 @@ def check_all_info(all_info: list[dict], apps_dir: str, *, skip_sha1: bool):
 
     if all(len(errors[e]) == 0 for e in errors):
         print("All files are present and correct.")
+
+
+def check_duplicates(all_info: list[dict]):
+    """Check if app filenames collides."""
+    # Build a filename -> indices mapping
+    positions = defaultdict(list)
+    for index, info in enumerate(all_info):
+        positions[info['file'].lower()].append(index)
+
+    # Collect duplicated filenames and indices
+    dups = {}
+    for indices in positions.values():
+        if len(indices) > 1:
+            # flase positive if the url is the same
+            if len({all_info[i]['url'] for i in indices}) == 1:
+                continue
+            dups[all_info[indices[0]]['file']] = indices
+
+    if dups:
+        print("\nDuplicate app filenames (case insensitive):")
+        for filename, indices in dups.items():
+            print(f"- {filename}")
+            for i in indices:
+                info = all_info[i]
+                print(f"  - {info['app_file']}[{info['section']}]")
+
+
+def check_unneeded(all_info: list[dict], apps_dir: str):
+    """Check if any app file is not in the info specifications."""
+    local_apps = set(os.listdir(apps_dir))
+    info_apps = {info['file'] for info in all_info}
+    unneeded_apps = local_apps.difference(info_apps)
+
+    if unneeded_apps:
+        print("\nUnneeded app files:")
+        for filename in unneeded_apps:
+            print(f"- {filename}")
 
 
 def main():
@@ -170,6 +207,8 @@ def main():
 
     apps_info = extract_all_info(txt_files=args.txt_file)
     check_all_info(apps_info, apps_dir=apps_dir, skip_sha1=args.no_sha1)
+    check_duplicates(apps_info)
+    check_unneeded(apps_info, apps_dir)
 
 
 if __name__ == "__main__":
