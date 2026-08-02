@@ -40,6 +40,7 @@ def calculate_sha1(file_path: str) -> str:
 def extract_info(section: configparser.SectionProxy) -> dict | None:
     """Extract URLDownload, SHA1, and SizeBytes from one section in ini_file."""
     url_download = section.get('URLDownload')
+    # Invalid section if URLDownload not present
     if url_download is None:
         return None
 
@@ -58,40 +59,29 @@ def extract_info(section: configparser.SectionProxy) -> dict | None:
     }
 
 
-def check_section(
-    section: configparser.SectionProxy,
-    apps_dir: str,
-    *,
-    dump: bool,
-    sha1: bool = True,
-):
+def check_info(info: dict, apps_dir: str, *, sha1: bool = True):
     """Check app specified in ini_file under given section."""
-    info = extract_info(section)
-    if info is None:
-        return E.PASS, None
-
     dest_path = os.path.join(apps_dir, info['file'])
 
-    if dump:
-        print(info['file'])
-        return E.PASS, None
+    # Check complete info
     if not info['sha1'] or not info['size']:
-        return E.INFO, section.name
+        return E.INFO
 
-    # Check if file already exists
+    # Check file existence
     if not os.path.exists(dest_path):
-        return E.MISSING, (info['url'], info['file'])
+        return E.MISSING
 
     # Check size and SHA1
     sha1_match = calculate_sha1(dest_path) == info['sha1'].lower() if sha1 else True
     size_match = os.path.getsize(dest_path) == int(info['size'])
     if not sha1_match and not size_match:
-        return E.BOTH, info['file']
+        return E.BOTH
     if not sha1_match and size_match:
-        return E.SHA1, info['file']
+        return E.SHA1
     if not size_match and sha1_match:
-        return E.SIZE, info['file']
-    return E.PASS, None
+        return E.SIZE
+
+    return E.PASS
 
 
 def report(errors: dict, apps_dir: str):
@@ -131,19 +121,22 @@ def check_apps(txt_files: list[str], apps_dir: str, *, dump: bool, sha1: bool):
     config = configparser.ConfigParser(interpolation=None)
 
     for file in files:
+        config.clear()
         config.read(os.path.join(os.getcwd(), file))
         sections = [s for s in config.sections() if s in SECTIONS]
         for section in sections:
-            err, args = check_section(config[section], apps_dir, dump=dump, sha1=sha1)
-            if err == E.PASS:
+            info = extract_info(config[section])
+            if info is None:
                 continue
-            if err == E.INFO:
-                errors[err].append(f"{file}[{args}]")
+
+            if dump:
+                print(info['file'])
             else:
-                errors[err].append(args)
-        config.clear()
-        if not dump:
-            print('.', end='', flush=True)
+                print('.', end='', flush=True)
+                ret = check_info(info, apps_dir, sha1=sha1)
+                if ret == E.PASS:
+                    continue
+                errors[ret].append(f"{file}[{section}]: {info['file']}")
 
     if not dump:
         print()
@@ -160,7 +153,7 @@ if __name__ == "__main__":
                         help="Directory to check for downloaded apps. "
                         "Default is 'apps' in the current directory.")
     parser.add_argument('-D', '--dump', action='store_true',
-                        help="Dump athe list of all apps without checking.")
+                        help="Skip all checking. Only dump the list of all apps.")
     parser.add_argument('--no-sha1', action='store_true',
                         help="Skip SHA1 check. Only check file size.")
     args = parser.parse_args()
