@@ -25,16 +25,10 @@ class E(enum.Enum):
 
     PASS = 0
     INFO = 1
-    MISSING = 2
+    MISS = 2
     SHA1 = 3
     SIZE = 4
     BOTH = 5
-
-
-def calculate_sha1(file_path: str) -> str:
-    """Calculate SHA1 hash of the file at file_path."""
-    with open(file_path, 'rb') as f:
-        return hashlib.file_digest(f, 'sha1').hexdigest()
 
 
 def extract_info(section: configparser.SectionProxy) -> dict | None:
@@ -59,7 +53,35 @@ def extract_info(section: configparser.SectionProxy) -> dict | None:
     }
 
 
-def check_info(info: dict, apps_dir: str, *, sha1: bool = True):
+def extract_all_info(txt_files: list[str]):
+    """Extract info from all .txt files in rapps-db repo."""
+    files = txt_files or os.listdir(os.getcwd())
+    files = [f for f in files if f.endswith('.txt')]
+
+    config = configparser.ConfigParser(interpolation=None)
+
+    all_info = []
+    for file in files:
+        config.clear()
+        config.read(os.path.join(os.getcwd(), file))
+        sections = [s for s in config.sections() if s in SECTIONS]
+        for section in sections:
+            info = extract_info(config[section])
+            if info is not None:
+                info['app_file'] = file
+                info['section'] = section
+                all_info.append(info)
+
+    return all_info
+
+
+def calc_sha1(file_path: str) -> str:
+    """Calculate SHA1 hash of the file at file_path."""
+    with open(file_path, 'rb') as f:
+        return hashlib.file_digest(f, 'sha1').hexdigest()
+
+
+def check_info(info: dict, apps_dir: str, *, skip_sha1: bool):
     """Check app specified in ini_file under given section."""
     dest_path = os.path.join(apps_dir, info['file'])
 
@@ -69,10 +91,11 @@ def check_info(info: dict, apps_dir: str, *, sha1: bool = True):
 
     # Check file existence
     if not os.path.exists(dest_path):
-        return E.MISSING
+        return E.MISS
 
     # Check size and SHA1
-    sha1_match = calculate_sha1(dest_path) == info['sha1'].lower() if sha1 else True
+    # Use `or` to short-circuit the SHA1 check if skip_sha1 is True
+    sha1_match = skip_sha1 or (calc_sha1(dest_path) == info['sha1'].lower())
     size_match = os.path.getsize(dest_path) == int(info['size'])
     if not sha1_match and not size_match:
         return E.BOTH
@@ -84,15 +107,27 @@ def check_info(info: dict, apps_dir: str, *, sha1: bool = True):
     return E.PASS
 
 
-def report(errors: dict, apps_dir: str):
-    """Report errors found during check_apps."""
+def check_all_info(all_info: list[dict], apps_dir: str, *, skip_sha1: bool):
+    """Check apps in rapps-db repo."""
+    errors = { E.INFO: [], E.MISS: [], E.SHA1: [], E.SIZE: [], E.BOTH: [] }
     error_messages = {
         E.INFO: "Missing SHA1 or SizeBytes",
-        E.MISSING: "Missing files",
+        E.MISS: "Missing files",
         E.SHA1: "SHA1 mismatch",
         E.SIZE: "Size mismatch",
         E.BOTH: "Both SHA1 and Size mismatch",
     }
+
+    for info in all_info:
+        print('.', end='', flush=True)
+        ret = check_info(info, apps_dir, skip_sha1=skip_sha1)
+        if ret == E.PASS:
+            continue
+        errors[ret].append({
+            'location': "{app_file}[{section}]".format_map(info),
+            'info': info,
+        })
+    print()
 
     for error_type, message in error_messages.items():
         if len(errors[error_type]) > 0:
@@ -100,9 +135,9 @@ def report(errors: dict, apps_dir: str):
                 e['location'] + ': ' + e['info']['file'] for e in errors[error_type]
             ]))
 
-    if len(errors[E.MISSING]) > 0:
+    if len(errors[E.MISS]) > 0:
         with open('urls', 'w') as f:
-            for e in errors[E.MISSING]:
+            for e in errors[E.MISS]:
                 f.writelines([f"{e['info']['url']}\n",
                               f"  dir={apps_dir}\n",
                               f"  out={e['info']['file']}\n"])
@@ -113,41 +148,8 @@ def report(errors: dict, apps_dir: str):
         print("All files are present and correct.")
 
 
-def check_apps(txt_files: list[str], apps_dir: str, *, dump: bool, sha1: bool):
-    """Check apps in rapps-db repo."""
-    files = txt_files or os.listdir(os.getcwd())
-    files = [f for f in files if f.endswith('.txt')]
-    errors = { E.INFO: [], E.MISSING: [], E.SHA1: [], E.SIZE: [], E.BOTH: [] }
-
-    config = configparser.ConfigParser(interpolation=None)
-
-    for file in files:
-        config.clear()
-        config.read(os.path.join(os.getcwd(), file))
-        sections = [s for s in config.sections() if s in SECTIONS]
-        for section in sections:
-            info = extract_info(config[section])
-            if info is None:
-                continue
-
-            if dump:
-                print(info['file'])
-            else:
-                print('.', end='', flush=True)
-                ret = check_info(info, apps_dir, sha1=sha1)
-                if ret == E.PASS:
-                    continue
-                errors[ret].append({
-                    'location': f"{file}[{section}]",
-                    'info': info,
-                })
-
-    if not dump:
-        print()
-        report(errors, apps_dir)
-
-
-if __name__ == "__main__":
+def main():
+    """Parse arguments and initiate the check."""
     parser = argparse.ArgumentParser(description="Check ReactOS apps "
                                      "for sha1 and size mismatches.")
     parser.add_argument('txt_file', nargs='*',
@@ -156,15 +158,19 @@ if __name__ == "__main__":
     parser.add_argument('-d', '--apps-dir', default='./apps',
                         help="Directory to check for downloaded apps. "
                         "Default is 'apps' in the current directory.")
-    parser.add_argument('-D', '--dump', action='store_true',
-                        help="Skip all checking. Only dump the list of all apps.")
-    parser.add_argument('--no-sha1', action='store_true',
+    parser.add_argument('-S', '--no-sha1', action='store_true',
                         help="Skip SHA1 check. Only check file size.")
     args = parser.parse_args()
 
     apps_dir = os.path.abspath(args.apps_dir)
-    os.makedirs(apps_dir, exist_ok=True)
-    check_apps(txt_files=args.txt_file,
-               apps_dir=apps_dir,
-               dump=args.dump,
-               sha1=not args.no_sha1)
+    if not os.path.isdir(apps_dir):
+        print(f"Error: '{apps_dir}' is not a valid directory.")
+        print("Please create the directory or specify a valid one using -d.")
+        exit(1)
+
+    apps_info = extract_all_info(txt_files=args.txt_file)
+    check_all_info(apps_info, apps_dir=apps_dir, skip_sha1=args.no_sha1)
+
+
+if __name__ == "__main__":
+    main()
