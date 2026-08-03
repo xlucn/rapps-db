@@ -137,9 +137,9 @@ def check_all_info(all_info: list[dict], apps_dir: str, *, skip_sha1: bool):
     if len(errors[E.MISS]) > 0:
         with open("urls", "w") as f:
             for e in errors[E.MISS]:
-                f.write(f"{e['info']['url']}\n")
+                f.write(f"{e['url']}\n")
                 f.write(f"  dir={apps_dir}\n")
-                f.write(f"  out={e['info']['file']}\n")
+                f.write(f"  out={e['file']}\n")
         print("Missing files URLs written to `urls' file. ")
         print("You can use it with aria2 to download them.")
 
