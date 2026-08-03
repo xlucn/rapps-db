@@ -5,10 +5,13 @@ This script checks rapps-db repo containing app spec files with the schema:
     https://reactos.org/wiki/RAPPS#File_Schema
 
 This script will check the file specified in [Section] group (for now).
-- Files absent or have mismatched size and hash are writen to a "urls" file,
-  which can be used for aria2 to download them.
+- Absent files are writen to a "urls" file, which can be used for aria2 to
+  download them.
 - Files have only one mismatch between size and hash are considered to have
   suspiciously wrong size and hash. Please check the spec files.
+
+Requirements:
+- Python 3.11 or later, for hashlib.file_digest() function.
 """
 
 import argparse
@@ -16,6 +19,7 @@ import configparser
 import enum
 import hashlib
 import os
+import sys
 import urllib.parse
 from collections import defaultdict
 
@@ -92,7 +96,7 @@ def check_info(info: dict, apps_dir: str, *, skip_sha1: bool):
         return E.INFO
 
     # Check file existence
-    if not os.path.exists(dest_path):
+    if not os.path.isfile(dest_path):
         return E.MISS
 
     # Check size and SHA1
@@ -211,10 +215,10 @@ def main():
     if not os.path.isdir(apps_dir):
         print(f"Error: `{apps_dir}' is not a valid directory.")
         print("Please create the directory or specify a valid one using -d.")
-        exit(1)
+        sys.exit(1)
 
     apps_info = extract_all_info(txt_files=args.txt_file)
-    check_all_info(apps_info, apps_dir=apps_dir, skip_sha1=args.no_sha1)
+    check_all_info(apps_info, apps_dir, skip_sha1=args.no_sha1)
     check_duplicates(apps_info)
     check_unneeded(apps_info, apps_dir)
 
