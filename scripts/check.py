@@ -220,7 +220,8 @@ def main():
     apps_info = extract_all_info(txt_files=args.txt_file)
     check_all_info(apps_info, apps_dir, skip_sha1=args.no_sha1)
     check_duplicates(apps_info)
-    check_unneeded(apps_info, apps_dir)
+    if args.txt_file is None:
+        check_unneeded(apps_info, apps_dir)
 
 
 if __name__ == "__main__":
